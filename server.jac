@@ -115,14 +115,15 @@ walker analyze_image {
             f.write(data);
         }
         img = Image(file_path);
-        text = self.message if self.message else "Describe the image content.";
-        desc = here.chat_with_image(img, text);
-        
-        # Add to chat history as a system message about the uploaded image
-        context_msg = f"User uploaded an image '{self.file_name}'. Analysis: {desc}";
-        here.chat_history.append({"role": "system", "content": context_msg});
-        
+
         if self.message {
+            text = self.message;
+            desc = here.chat_with_image(img, text);
+
+            # Add to chat history with the analysis result
+            context_msg = f"User uploaded an image '{self.file_name}'. Analysis: {desc}";
+            here.chat_history.append({"role": "system", "content": context_msg});
+
             here.chat_history.append({"role": "user", "content": self.message});
             response = here.chat_with_image(
                 img=img,
@@ -132,7 +133,10 @@ walker analyze_image {
             here.chat_history.append({"role": "assistant", "content": response});
             report {"description": desc, "response": response};
         } else {
-            report {"description": desc};
+            # Only record that an image was uploaded
+            context_msg = f"User uploaded an image '{self.file_name}'.";
+            here.chat_history.append({"role": "system", "content": context_msg});
+            report {"status": "image uploaded"};
         }
     }
 }
@@ -161,14 +165,15 @@ walker analyze_video {
             f.write(data);
         }
         video = Video(file_path, 1);
-        text = self.message if self.message else "Summarize the video content.";
-        summary = here.chat_with_video(video, text);
-        
-        # Add to chat history as a system message about the uploaded video
-        context_msg = f"User uploaded a video '{self.file_name}'. Summary: {summary}";
-        here.chat_history.append({"role": "system", "content": context_msg});
-        
+
         if self.message {
+            text = self.message;
+            summary = here.chat_with_video(video, text);
+
+            # Add to chat history with the summary result
+            context_msg = f"User uploaded a video '{self.file_name}'. Summary: {summary}";
+            here.chat_history.append({"role": "system", "content": context_msg});
+
             here.chat_history.append({"role": "user", "content": self.message});
             response = here.chat_with_video(
                 video=video,
@@ -178,7 +183,10 @@ walker analyze_video {
             here.chat_history.append({"role": "assistant", "content": response});
             report {"summary": summary, "response": response};
         } else {
-            report {"summary": summary};
+            # Only record that a video was uploaded
+            context_msg = f"User uploaded a video '{self.file_name}'.";
+            here.chat_history.append({"role": "system", "content": context_msg});
+            report {"status": "video uploaded"};
         }
     }
 }

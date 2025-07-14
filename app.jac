@@ -66,12 +66,14 @@ def bootstrap_frontend(token: str) {
         if response.status_code == 200 {
             res = response.json();
             
-            # Handle different response types
+            # Handle analysis results only when provided
             if endpoint in ['analyze_image', 'analyze_video'] {
                 msg = res["reports"][0].get("description") or res["reports"][0].get("summary");
-                file_type_name = "image" if endpoint == 'analyze_image' else "video";
-                analysis_message = f"I've analyzed your {file_type_name}: {msg}. Feel free to ask me any questions about it!";
-                st.session_state.messages.append({"role": "assistant", "content": analysis_message});
+                if msg {
+                    file_type_name = "image" if endpoint == 'analyze_image' else "video";
+                    analysis_message = f"I've analyzed your {file_type_name}: {msg}. Feel free to ask me any questions about it!";
+                    st.session_state.messages.append({"role": "assistant", "content": analysis_message});
+                }
             }
             
             st.success(success_msg);
