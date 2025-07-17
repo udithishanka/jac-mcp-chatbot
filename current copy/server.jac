@@ -13,19 +13,20 @@ glob llm = Model(model_name='gpt-4o-mini');
 glob MCP_SERVER_URL: str = os.getenv('MCP_SERVER_URL', 'http://localhost:8899/mcp');
 
 
-# Routing enum and nodes
-enum ChatType {
-    RAG = "RAG",
-    QA = "QA"
-}
-
 node Router {
-    "Classify the message as RAG (needs document retrieval) or QA (can answer directly)"
+    "Classify the message as RAG (needs document retrieval) , QA (can answer directly), image, or video analysis"
     def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.0);
 }
 
 node Chat {
     has chat_type: ChatType;
+}
+
+enum ChatType {
+    RAG = "RAG",
+    QA = "QA",
+    IMAGE = "IMAGE",
+    VIDEO = "VIDEO"
 }
 
 node RagChat(Chat) {
@@ -46,6 +47,7 @@ node RagChat(Chat) {
 
 node QAChat(Chat) {
     has chat_type: ChatType = ChatType.QA;
+
     "Respond to message using only chat history (QA)"
     def respond(message: str, chat_history: list[dict]) -> str {
         return llm(
@@ -56,6 +58,7 @@ node QAChat(Chat) {
         );
     }
 }
+
 
 """Available tools: 'search_docs' or 'search_web' with {"query": "your query"}.
 
@@ -70,6 +73,19 @@ def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
     return mcp_client.call_mcp_tool(name=name, arguments=arguments);;
 }
 
+walker interact {
+    has message: str;
+    has session_id: str;
+    has chat_history: list[dict] = [];
+
+    can init_session with `root entry {
+         visit [-->](`?Session)(?id == self.session_id) else {
+            session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
+            print("Session Node Created");
+            visit session_node;
+        }
+    }
+}
 
 node Session {
     has id: str;
@@ -84,24 +100,31 @@ node Session {
             messages=chat_history,
             max_react_iterations=6
         );
-    
+
     def chat_with_image(img: Image, text: Text) -> str by llm();
 
     def chat_with_video(video: Video, text: Text) -> str by llm(method="Chain-of-Thoughts");
+
+    can chat with interact entry {
+        # Sync walker chat_history with node chat_history
+        visitor.chat_history = self.chat_history;
+        visitor.chat_history.append({"role": "user", "content": visitor.message});
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        visitor.chat_history.append({"role": "assistant", "content": response});
+        self.chat_history = visitor.chat_history;
+        report {"response": response};
+    }
 }
 
 
-walker interact {
-    has message: str;
-    has session_id: str;
+walker infer {
+    has message:str;
+    has chat_history: list[dict];
 
-    can init_session with `root entry {
-        visit [-->](`?Session)(?id == self.session_id) else {
-            session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
-            print("Session Node Created");
-            visit session_node;
-        }
-        # Ensure router and chat nodes exist
+    can init_router with `root entry {
         visit [-->](`?Router) else {
             router_node = here ++> Router();
             router_node ++> RagChat();
@@ -109,23 +132,12 @@ walker interact {
             visit router_node;
         }
     }
-
-    can chat with Session entry {
-        here.chat_history.append({"role": "user", "content": self.message});
-        # Route the message
-        router = here.root().out("Router")[0];
-        chat_type = router.classify(self.message);
-        if chat_type == ChatType.RAG {
-            rag_node = router.out("RagChat")[0];
-            response = rag_node.respond(self.message, here.chat_history);
-        } else {
-            qa_node = router.out("QAChat")[0];
-            response = qa_node.respond(self.message, here.chat_history);
-        }
-        here.chat_history.append({"role": "assistant", "content": response});
-        report {"response": response};
+    can route with Router entry {
+        classification = here.classify(message = self.message);
+        visit [-->](`?Chat)(?chat_type==classification);
     }
 }
+
 
 walker upload_pdf {
     has file_name: str;
@@ -153,16 +165,10 @@ walker analyze_image {
     has message: str = None;
 
     can init_session with `root entry {
-        visit [-->](`?Session)(?id == self.session_id) else {
+         visit [-->](`?Session)(?id == self.session_id) else {
             session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
             print("Session Node Created for image analysis");
             visit session_node;
-        }
-        visit [-->](`?Router) else {
-            router_node = here ++> Router();
-            router_node ++> RagChat();
-            router_node ++> QAChat();
-            visit router_node;
         }
     }
 
@@ -178,28 +184,25 @@ walker analyze_image {
         img = Image(file_path);
         text = self.message if self.message else "Describe the image content.";
         desc = here.chat_with_image(img, text);
+
+        # Add to chat history as a system message about the uploaded image
         context_msg = f"User uploaded an image '{self.file_name}'. Analysis: {desc}";
         here.chat_history.append({"role": "system", "content": context_msg});
+
         if self.message {
             here.chat_history.append({"role": "user", "content": self.message});
-            # Route the message
-            router = here.root().out("Router")[0];
-            chat_type = router.classify(self.message);
-            if chat_type == ChatType.RAG {
-                rag_node = router.out("RagChat")[0];
-                response = rag_node.respond(self.message, here.chat_history);
-            } else {
-                qa_node = router.out("QAChat")[0];
-                response = qa_node.respond(self.message, here.chat_history);
-            }
+            response = here.chat_with_image(
+                img=img,
+                text=self.message,
+                chat_history=here.chat_history
+            );
             here.chat_history.append({"role": "assistant", "content": response});
             report {"description": desc, "response": response};
         } else {
-            report {"description": desc}; 
+            report {"description": desc};
         }
     }
 }
-
 
 walker analyze_video {
     has file_name: str;
@@ -208,16 +211,10 @@ walker analyze_video {
     has message: str = None;
 
     can init_session with `root entry {
-        visit [-->](`?Session)(?id == self.session_id) else {
+         visit [-->](`?Session)(?id == self.session_id) else {
             session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
             print("Session Node Created for video analysis");
             visit session_node;
-        }
-        visit [-->](`?Router) else {
-            router_node = here ++> Router();
-            router_node ++> RagChat();
-            router_node ++> QAChat();
-            visit router_node;
         }
     }
 
@@ -233,20 +230,18 @@ walker analyze_video {
         video = Video(file_path, 1);
         text = self.message if self.message else "Summarize the video content.";
         summary = here.chat_with_video(video, text);
+
+        # Add to chat history as a system message about the uploaded video
         context_msg = f"User uploaded a video '{self.file_name}'. Summary: {summary}";
         here.chat_history.append({"role": "system", "content": context_msg});
+
         if self.message {
             here.chat_history.append({"role": "user", "content": self.message});
-            # Route the message
-            router = here.root().out("Router")[0];
-            chat_type = router.classify(self.message);
-            if chat_type == ChatType.RAG {
-                rag_node = router.out("RagChat")[0];
-                response = rag_node.respond(self.message, here.chat_history);
-            } else {
-                qa_node = router.out("QAChat")[0];
-                response = qa_node.respond(self.message, here.chat_history);
-            }
+            response = here.chat_with_video(
+                video=video,
+                text=self.message,
+                chat_history=here.chat_history
+            );
             here.chat_history.append({"role": "assistant", "content": response});
             report {"summary": summary, "response": response};
         } else {
