@@ -63,10 +63,7 @@ walker infer {
 node RagChat(Chat) {
     has chat_type: ChatType = ChatType.RAG;
     "Respond to message using document retrieval (RAG)"
-    def respond(message: str, chat_history: list[dict]) -> str {
-        # Retrieve context from RAG engine
-        context = rag_engine.get_from_chroma(query=message);
-        return llm(
+    def respond(message: str, chat_history: list[dict]) -> str by llm(
             method="ReAct",
             tools=([use_mcp_tool]),
             messages=chat_history,
@@ -74,8 +71,22 @@ node RagChat(Chat) {
             max_react_iterations=6
         );
     }
-    
-}
+    can chat with infer entry {
+        # Sync walker chat_history with node chat_history
+        # visitor.chat_history = self.chat_history;
+        print("interact walker has entered chat with message:", visitor.message);
+        # visitor.chat_history.append({"role": "user", "content": visitor.message});
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        visitor.chat_history.append({"role": "assistant", "content": response});
+        self.chat_history = visitor.chat_history;
+        visitor.response = response;
+        print("Response generated:", response);
+        report {"response": response, "chat_history": visitor.chat_history};
+    } 
+
 
 node QAChat(Chat) {
     has chat_type: ChatType = ChatType.QA;
