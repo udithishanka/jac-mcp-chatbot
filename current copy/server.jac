@@ -29,10 +29,7 @@ enum ChatType {
 
 node Router {
     "Classify the message as RAG, QA, IMAGE, or VIDEO. If classification fails, default to QA."
-    # def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.8);
-    def classify(message: str) -> str {
-        return ChatType.QA;
-    }
+    def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.8);
 }
 
 node Chat {
@@ -53,11 +50,60 @@ walker infer {
         }
     }
     can route with Router entry {
-        # classification = here.classify(message = self.message);
-        classification = ChatType.QA;  # Default to QA for simplicity
+        classification = here.classify(message = self.message);
         print("Routing message:", self.message, "to chat type:", classification);
         visit [-->](`?Chat)(?chat_type==classification);
     }
+}
+
+
+node ImageChat(Chat) {
+    has chat_type: ChatType = ChatType.IMAGE;
+    "Respond to message using image analysis (IMAGE)"
+    def respond(message: str, chat_history: list[dict]) -> str by llm(
+            method="ReAct",
+            tools=([use_mcp_tool]),
+            messages=chat_history,
+            context=context,
+            max_react_iterations=6
+        );
+    }
+    can chat with infer entry {
+        # Sync walker chat_history with node chat_histor
+        print("interact walker has entered to Imagechat node", visitor.message);
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        visitor.chat_history.append({"role": "assistant", "content": response});
+        self.chat_history = visitor.chat_history;
+        visitor.response = response;
+        report {"response": response, "chat_history": visitor.chat_history};
+}
+
+
+node VideoChat(Chat) {
+    has chat_type: ChatType = ChatType.VIDEO;
+    "Respond to message using video analysis (VIDEO)"
+    def respond(message: str, chat_history: list[dict]) -> str by llm(
+            method="ReAct",
+            tools=([use_mcp_tool]),
+            messages=chat_history,
+            context=context,
+            max_react_iterations=6
+        );
+    }
+    can chat with infer entry {
+        # Sync walker chat_history with node chat_histor
+        print("interact walker has entered to Videochat node", visitor.message);
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        visitor.chat_history.append({"role": "assistant", "content": response});
+        self.chat_history = visitor.chat_history;
+        visitor.response = response;
+        report {"response": response, "chat_history": visitor.chat_history};
 }
 
 node RagChat(Chat) {
@@ -72,10 +118,8 @@ node RagChat(Chat) {
         );
     }
     can chat with infer entry {
-        # Sync walker chat_history with node chat_history
-        # visitor.chat_history = self.chat_history;
-        print("interact walker has entered chat with message:", visitor.message);
-        # visitor.chat_history.append({"role": "user", "content": visitor.message});
+        # Sync walker chat_history with node chat_histor
+        print("interact walker has entered to Ragchat node", visitor.message);
         response = self.respond(
             message=visitor.message,
             chat_history=visitor.chat_history,
@@ -83,9 +127,8 @@ node RagChat(Chat) {
         visitor.chat_history.append({"role": "assistant", "content": response});
         self.chat_history = visitor.chat_history;
         visitor.response = response;
-        print("Response generated:", response);
         report {"response": response, "chat_history": visitor.chat_history};
-    } 
+}
 
 
 node QAChat(Chat) {
@@ -102,9 +145,7 @@ node QAChat(Chat) {
 
     can chat with infer entry {
         # Sync walker chat_history with node chat_history
-        # visitor.chat_history = self.chat_history;
         print("interact walker has entered chat with message:", visitor.message);
-        # visitor.chat_history.append({"role": "user", "content": visitor.message});
         response = self.respond(
             message=visitor.message,
             chat_history=visitor.chat_history,
