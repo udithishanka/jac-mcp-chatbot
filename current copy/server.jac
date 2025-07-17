@@ -13,20 +13,51 @@ glob llm = Model(model_name='gpt-4o-mini');
 glob MCP_SERVER_URL: str = os.getenv('MCP_SERVER_URL', 'http://localhost:8899/mcp');
 
 
+"""ChatType enum defines the types of chat interactions. ChatType must be one of:
+- RAG: For interactions that require document retrieval.
+- QA: For interactions that can be answered directly without document retrieval.
+- IMAGE: For interactions involving image analysis.
+- VIDEO: For interactions involving video analysis.
+"""
+enum ChatType {
+    RAG = "RAG",
+    QA = "QA",
+    IMAGE = "IMAGE",
+    VIDEO = "VIDEO"
+}
+
+
 node Router {
-    "Classify the message as RAG (needs document retrieval) , QA (can answer directly), image, or video analysis"
-    def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.0);
+    "Classify the message as RAG, QA, IMAGE, or VIDEO. If classification fails, default to QA."
+    # def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.8);
+    def classify(message: str) -> str {
+        return ChatType.QA;
+    }
 }
 
 node Chat {
     has chat_type: ChatType;
 }
 
-enum ChatType {
-    RAG = "RAG",
-    QA = "QA",
-    IMAGE = "IMAGE",
-    VIDEO = "VIDEO"
+
+walker infer {
+    has message:str;
+    has chat_history: list[dict];
+
+    can init_router with `root entry {
+        visit [-->](`?Router) else {
+            router_node = here ++> Router();
+            router_node ++> RagChat();
+            router_node ++> QAChat();
+            visit router_node;
+        }
+    }
+    can route with Router entry {
+        # classification = here.classify(message = self.message);
+        classification = ChatType.QA;  # Default to QA for simplicity
+        print("Routing message:", self.message, "to chat type:", classification);
+        visit [-->](`?Chat)(?chat_type==classification);
+    }
 }
 
 node RagChat(Chat) {
@@ -43,20 +74,36 @@ node RagChat(Chat) {
             max_react_iterations=6
         );
     }
+    
 }
 
 node QAChat(Chat) {
     has chat_type: ChatType = ChatType.QA;
 
-    "Respond to message using only chat history (QA)"
-    def respond(message: str, chat_history: list[dict]) -> str {
-        return llm(
+    "Generate a helpful response to the user's message. Use available mcp tool when needed. Consider any uploaded media context."
+    def respond(message:str, chat_history:list[dict]) -> str
+        by llm(
             method="ReAct",
             tools=([use_mcp_tool]),
             messages=chat_history,
             max_react_iterations=6
         );
-    }
+
+    can chat with infer entry {
+        # Sync walker chat_history with node chat_history
+        # visitor.chat_history = self.chat_history;
+        print("interact walker has entered chat with message:", visitor.message);
+        # visitor.chat_history.append({"role": "user", "content": visitor.message});
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        visitor.chat_history.append({"role": "assistant", "content": response});
+        self.chat_history = visitor.chat_history;
+        visitor.response = response;
+        print("Response generated:", response);
+        report {"response": response, "chat_history": visitor.chat_history};
+    } 
 }
 
 
@@ -79,13 +126,15 @@ walker interact {
     has chat_history: list[dict] = [];
 
     can init_session with `root entry {
-         visit [-->](`?Session)(?id == self.session_id) else {
+        visit [-->](`?Session)(?id == self.session_id) else {
             session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
             print("Session Node Created");
             visit session_node;
         }
     }
 }
+
+
 
 node Session {
     has id: str;
@@ -109,32 +158,11 @@ node Session {
         # Sync walker chat_history with node chat_history
         visitor.chat_history = self.chat_history;
         visitor.chat_history.append({"role": "user", "content": visitor.message});
-        response = self.respond(
-            message=visitor.message,
-            chat_history=visitor.chat_history,
-        );
-        visitor.chat_history.append({"role": "assistant", "content": response});
+        response = infer(message=visitor.message, chat_history=self.chat_history) spawn root;
+        print("Response from infer:", response.response);
+        visitor.chat_history.append({"role": "assistant", "content": response.response});
         self.chat_history = visitor.chat_history;
-        report {"response": response};
-    }
-}
-
-
-walker infer {
-    has message:str;
-    has chat_history: list[dict];
-
-    can init_router with `root entry {
-        visit [-->](`?Router) else {
-            router_node = here ++> Router();
-            router_node ++> RagChat();
-            router_node ++> QAChat();
-            visit router_node;
-        }
-    }
-    can route with Router entry {
-        classification = here.classify(message = self.message);
-        visit [-->](`?Chat)(?chat_type==classification);
+        report {"response": response.response};
     }
 }
 
