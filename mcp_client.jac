@@ -23,17 +23,18 @@ def list_mcp_tools()  -> list[dict] {
                 tool_names = [tool.name for tool in tools.tools];
                 logger.info(f"tool list of names:{tool_names}");
                 return tool_names;
-                # for tool in tools {
+                # for tool in tools.tools {
                 #     inputs = {};
                 #     structured_tools.append(
 
-                #         {'name' : tool.name , 'description' : (tool.description or 'No description' ) , 'inputs' : (inputs or {'query' : 'your query' } ) }
+                #         {'name' : tool.name , 'description' : (tool.description or 'No description' ) , 'Expected input format' : (inputs or {'query' : 'your text' } ) }
                 #     );
                 # if (tool.inputSchema and ('properties' in tool.inputSchema) ) {
                 #     for (key, schema) in tool.inputSchema[ 'properties' ].items() {
                 #         inputs[ key ] = schema.get('type', 'string');
                 #     }
                 # } }
+                # logger.info(f"structured tools - {structured_tools}");
                 # return structured_tools;
             }
         }

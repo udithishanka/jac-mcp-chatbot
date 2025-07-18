@@ -19,18 +19,11 @@ with entry {
 }
 
 
-# """Available tools: 'search_docs' or 'search_web' with {"query": "your query"}.
+"""Use MCP tool to perform actions. 
+name must be one of available tools, do not make up any tool names.
 
-# Example:
-# {"name": "search_docs", "arguments": {"query": "example"}}
-# """
-"""Use MCP tool to perform actions. name must be one of available tools, do not make up any tool names.
-MUST provide a str input to `use_mcp_tool`'s `arguments` field, NOT a list.
-arguments'key is always 'query' and value is the search query.
 Example input for `use_mcp_tool`:
 {"name": "tool_name", "arguments": {"query": "your query"}}
-
-!!IMPORTANT - Avoid using a list for `arguments` as it will not work with the MCP tool call.
 """
 def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
     return mcp_client.call_mcp_tool(name=name, arguments=arguments);
@@ -49,7 +42,8 @@ node Session {
     has chat_history: list[dict];
     has status: int = 1;
 
-    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Trincomalee, Sri Lanka\"}), never as a list or schema_dict_wrapper."""
+    # """Generate a helpful response. Use MCP tools when needed and always pass tool arguments as a simple dictionary (e.g., {"query": "your text"})."""
+    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
     def respond(message:str, chat_history:list[dict]) -> str
         by llm(
             method="ReAct",
