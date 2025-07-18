@@ -1,4 +1,5 @@
 import sys;
+import logging;
 import from mtllm.llm {Model}
 import from mtllm.types {Image, Video, Text}
 import from tools {RagEngine}
@@ -8,8 +9,14 @@ import requests;
 import anyio;
 import mcp_client;
 
+with entry {
+    logger = logging.getLogger(__name__);
+    logger.setLevel(logging.INFO);
+    logging.basicConfig(level=logging.INFO);
+}
+
 glob rag_engine:RagEngine = RagEngine();
-glob llm = Model(model_name='gpt-4o-mini');
+glob llm = Model(model_name='gpt-4o-mini', verbose=True);
 glob MCP_SERVER_URL: str = os.getenv('MCP_SERVER_URL', 'http://localhost:8899/mcp');
 
 
@@ -36,19 +43,20 @@ node Chat {
     has chat_type: ChatType;
 }
 
-"""List available MCP tools."""
+"""Get available MCP tool names."""
 def list_mcp_tools() -> list[str] {
-    # logger.info("Listing available MCP tools...");
+    logger.info("Listing available MCP tools...");
     return mcp_client.list_mcp_tools();
 }
 
 """Use MCP tool to perform actions. 
-name must be one of available tools, do not make up any tool names.
+name must be one of available tools from list_mcp_tools(), do not make up any tool names.
 
 Example input for `use_mcp_tool`:
 {"name": "tool_name", "arguments": {"query": "your query"}}
 """
 def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
+    logger.info(f"Calling MCP tool: {name} with arguments: {arguments}");
     return mcp_client.call_mcp_tool(name=name, arguments=arguments);
 }
 
@@ -102,9 +110,7 @@ node VideoChat(Chat) {
     "Respond to message using video analysis (VIDEO)"
     def respond(message: str, chat_history: list[dict]) -> str by llm(
             method="ReAct",
-            tools=([use_mcp_tool, list_mcp_tools]),
-            messages=chat_history,
-            context=context,
+            tools=([list_mcp_tools, use_mcp_tool]),
             max_react_iterations=6
         );
     }
@@ -123,28 +129,27 @@ node VideoChat(Chat) {
 
 node RagChat(Chat) {
     has chat_type: ChatType = ChatType.RAG;
-    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
-    def respond(message: str, chat_history: list[dict]) -> str by llm(
+
+    """Generate a helpful response to the user's message. Use available mcp tool when needed.Use list_mcp_tools to find out what are the available tools. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
+    def respond(message:str, chat_history:list[dict]) -> str by llm(
             method="ReAct",
-            tools=([use_mcp_tool, list_mcp_tools]),
+            tools=([list_mcp_tools, use_mcp_tool]),
             messages=chat_history,
-            context=context,
             max_react_iterations=6
         );
-    }
     can chat with infer entry {
-        # Sync walker chat_history with node chat_histor
-        print("interact walker has entered to Ragchat node", visitor.message);
+        logger.info("interact walker has entered to Ragchat node: %s", visitor.message);
         response = self.respond(
             message=visitor.message,
             chat_history=visitor.chat_history,
         );
+        logger.info("Response generated at RAG: %s", response);
         visitor.chat_history.append({"role": "assistant", "content": response});
         self.chat_history = visitor.chat_history;
         visitor.response = response;
         report {"response": response, "chat_history": visitor.chat_history};
+    }
 }
-
 
 node QAChat(Chat) {
     has chat_type: ChatType = ChatType.QA;
@@ -159,7 +164,6 @@ node QAChat(Chat) {
         );
 
     can chat with infer entry {
-        # Sync walker chat_history with node chat_history
         print("interact walker has entered chat with message:", visitor.message);
         response = self.respond(
             message=visitor.message,
