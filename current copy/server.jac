@@ -36,6 +36,21 @@ node Chat {
     has chat_type: ChatType;
 }
 
+"""List available MCP tools."""
+def list_mcp_tools() -> list[str] {
+    # logger.info("Listing available MCP tools...");
+    return mcp_client.list_mcp_tools();
+}
+
+"""Use MCP tool to perform actions. 
+name must be one of available tools, do not make up any tool names.
+
+Example input for `use_mcp_tool`:
+{"name": "tool_name", "arguments": {"query": "your query"}}
+"""
+def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
+    return mcp_client.call_mcp_tool(name=name, arguments=arguments);
+}
 
 walker infer {
     has message:str;
@@ -62,7 +77,7 @@ node ImageChat(Chat) {
     "Respond to message using image analysis (IMAGE)"
     def respond(message: str, chat_history: list[dict]) -> str by llm(
             method="ReAct",
-            tools=([use_mcp_tool]),
+            tools=([use_mcp_tool, list_mcp_tools]),
             messages=chat_history,
             context=context,
             max_react_iterations=6
@@ -87,7 +102,7 @@ node VideoChat(Chat) {
     "Respond to message using video analysis (VIDEO)"
     def respond(message: str, chat_history: list[dict]) -> str by llm(
             method="ReAct",
-            tools=([use_mcp_tool]),
+            tools=([use_mcp_tool, list_mcp_tools]),
             messages=chat_history,
             context=context,
             max_react_iterations=6
@@ -108,10 +123,10 @@ node VideoChat(Chat) {
 
 node RagChat(Chat) {
     has chat_type: ChatType = ChatType.RAG;
-    "Respond to message using document retrieval (RAG)"
+    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
     def respond(message: str, chat_history: list[dict]) -> str by llm(
             method="ReAct",
-            tools=([use_mcp_tool]),
+            tools=([use_mcp_tool, list_mcp_tools]),
             messages=chat_history,
             context=context,
             max_react_iterations=6
@@ -134,11 +149,11 @@ node RagChat(Chat) {
 node QAChat(Chat) {
     has chat_type: ChatType = ChatType.QA;
 
-    "Generate a helpful response to the user's message. Use available mcp tool when needed. Consider any uploaded media context."
+    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
     def respond(message:str, chat_history:list[dict]) -> str
         by llm(
             method="ReAct",
-            tools=([use_mcp_tool]),
+            tools=([use_mcp_tool, list_mcp_tools]),
             messages=chat_history,
             max_react_iterations=6
         );
@@ -156,20 +171,6 @@ node QAChat(Chat) {
         print("Response generated:", response);
         report {"response": response, "chat_history": visitor.chat_history};
     } 
-}
-
-
-"""Available tools: 'search_docs' or 'search_web' with {"query": "your query"}.
-
-Only use a dictionary with plain key-value string pairs for `arguments`.
-Example:
-{
-  "name": "search_web",
-  "arguments": {"query": "example search"}
-}
-"""
-def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
-    return mcp_client.call_mcp_tool(name=name, arguments=arguments);;
 }
 
 walker interact {
@@ -193,7 +194,7 @@ node Session {
     has chat_history: list[dict];
     has status: int = 1;
 
-    "Generate a helpful response to the user's message. Use available mcp tool when needed. Consider any uploaded media context."
+    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """
     def respond(message:str, chat_history:list[dict]) -> str
         by llm(
             method="ReAct",
