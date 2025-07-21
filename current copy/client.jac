@@ -13,8 +13,7 @@ def bootstrap_frontend(token: str) {
     }
     if "session_id" not in st.session_state {
         st.session_state.session_id = "user_session_123";
-    }
-
+    }    
     uploaded_file = st.file_uploader('Upload File (PDF, TXT, Image, or Video)');
     if uploaded_file {
         file_b64 = base64.b64encode(uploaded_file.read()).decode('utf-8');
@@ -32,7 +31,7 @@ def bootstrap_frontend(token: str) {
             "session_id": st.session_state.session_id
         };
         response = requests.post(
-            "http://localhost:8000/walker/upload_pdf",
+            "http://localhost:8000/walker/upload_file",
             json=payload,
             headers={"Authorization": f"Bearer {token}"}
         );
