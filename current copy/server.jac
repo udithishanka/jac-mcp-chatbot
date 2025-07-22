@@ -200,21 +200,7 @@ node Session {
     has chat_history: list[dict];
     has status: int = 1;
 
-    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """
-    def respond(message:str, chat_history:list[dict]) -> str
-        by llm(
-            method="ReAct",
-            tools=([use_mcp_tool]),
-            messages=chat_history,
-            max_react_iterations=6
-        );
-
-    def chat_with_image(img: Image, text: Text) -> str by llm();
-
-    def chat_with_video(video: Video, text: Text) -> str by llm(method="Chain-of-Thoughts");
-
     can chat with interact entry {
-        # Sync walker chat_history with node chat_history
         visitor.chat_history = self.chat_history;
         visitor.chat_history.append({"role": "user", "content": visitor.message});
         response = infer(message=visitor.message, chat_history=self.chat_history) spawn root;
