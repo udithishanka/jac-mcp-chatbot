@@ -21,21 +21,22 @@ glob MCP_SERVER_URL: str = os.getenv('MCP_SERVER_URL', 'http://localhost:8899/mc
 
 
 """ChatType enum defines the types of chat interactions. ChatType must be one of:
-- RAG: For interactions that require document retrieval.
-- IMAGE_QA: For interactions that needs to refer images.
+- RAG: For interactions that require document retrieval or normal just direct QA questions.
+- QA: For interactions that doesn't need document retrieval but involves image analysis questions.
 - VIDEO: For interactions involving video analysis.
 """
 enum ChatType {
     RAG = "RAG",
-    IMAGE_QA = "IMAGE_QA",
+    QA = "QA",
     # IMAGE = "IMAGE",
     VIDEO = "VIDEO"
 }
 
 # - IMAGE: For interactions involving image analysis.
+# - VIDEO: For interactions involving video analysis.
 
 node Router {
-    "Classify the message as RAG, IMAGE_QA, or VIDEO. If classification fails, default to IMAGE_QA."
+    "Classify the message as RAG, QA. If classification fails, default to RAG."
     def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.8);
 }
 
@@ -68,15 +69,15 @@ walker infer {
         visit [-->](`?Router) else {
             router_node = here ++> Router();
             router_node ++> RagChat();
-            router_node ++> ImageQAChat();
+            router_node ++> QAChat();
             # router_node ++> ImageChat();
-            router_node ++> VideoChat();
+            # router_node ++> VideoChat();
             visit router_node;
         }
     }
     can route with Router entry {
         classification = here.classify(message = self.message);
-        print("Routing message:", self.message, "to chat type:", classification);
+        print("Routing message:", self.message, "to chat type:", classification, "type of classification:", type(classification));
         visit [-->](`?Chat)(?chat_type==classification);
     }
 }
@@ -92,6 +93,7 @@ node ImageChat(Chat) {
             messages=chat_history,
             max_react_iterations=6
         );
+
     can chat with infer entry {
         logger.info("interact walker has entered to Imagechat node: %s", visitor.message);
         response = self.respond(
@@ -191,24 +193,25 @@ node RagChat(Chat) {
     }
 }
 
-node ImageQAChat(Chat) {
-    has chat_type: ChatType = ChatType.IMAGE_QA;
+node QAChat(Chat) {
+    has chat_type: ChatType = ChatType.QA;
 
-    """Generate a helpful response to the user's message. Use available mcp tool when needed. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
-    def respond(message:str, chat_history:list[dict]) -> str
-        by llm(
-            method="ReAct",
-            tools=([use_mcp_tool, list_mcp_tools]),
-            messages=chat_history,
-            max_react_iterations=6
+    """Generate a response to the user's message using a video and text."""
+    def respond_with_video(video: Video, text: Text) -> str by llm(
+            method="Chain-of-Thoughts"
         );
+
+    """Answer the user's message(text) by referring to the provided image. Always refer to the given image, answer relevant to the given image."""
+    def respond_with_image(img: Image, text: Text, chat_history: list[dict]) -> str by llm(tools=([use_mcp_tool, list_mcp_tools]));
 
     can chat with infer entry {
-        print("interact walker has entered chat with message:", visitor.message);
-        response = self.respond(
-            message=visitor.message,
-            chat_history=visitor.chat_history,
+        print("interact walker has entered image chat with message:", visitor.message);
+        response = self.respond_with_image(
+            img=Image("/home/udith/jaseci_mtllm_pg/jac-rag-chatbot/current copy/uploads/mario.png"),
+            text=visitor.message,
+            chat_history=visitor.chat_history
         );
+
         visitor.chat_history.append({"role": "assistant", "content": response});
         self.chat_history = visitor.chat_history;
         visitor.response = response;
