@@ -83,7 +83,7 @@ walker infer {
 
 
 node ImageChat(Chat) {
-    has chat_type: ChatType = ChatType.IMAGE_CHAT;
+    has chat_type: ChatType = ChatType.IMAGE;
 
     """Generate a helpful response to the user's message. Use available mcp tool when needed.Use list_mcp_tools to find out what are the available tools. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
     def respond(message:str, chat_history:list[dict]) -> str by llm(
