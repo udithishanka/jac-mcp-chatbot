@@ -83,34 +83,22 @@ walker infer {
 
 
 node ImageChat(Chat) {
-    has chat_type: ChatType = ChatType.IMAGE;
+    has chat_type: ChatType = ChatType.IMAGE_CHAT;
 
-    # "Respond to message using image analysis (IMAGE)"
-    # def respond(message: str, chat_history: list[dict]) -> str by llm(
-    #         method="ReAct",
-    #         tools=([use_mcp_tool, list_mcp_tools]),
-    #         messages=chat_history,
-    #         context=context,
-    #         max_react_iterations=6
-    #     );
-
-    def respond_with_image(img: Image, text: Text) -> str by llm(
-        method="Chain-of-Thoughts",
-        tools=([use_mcp_tool, list_mcp_tools]),
-    );
-  
-    with entry {
-        logger.info("ImageChat node initialized with chat type: IMAGE");
-    }
-
-    can chat with infer entry {
-        # Sync walker chat_history with node chat_histor
-        logger.info("interact walker has entered to Imagechat node: %s", visitor.message);
-        img = Image("uploads/user_session_123/photo.jpg");
-        response = self.respond_with_image(
-            img=img,  # Assuming message is the image file path
-            text="Describe the image content."
+    """Generate a helpful response to the user's message. Use available mcp tool when needed.Use list_mcp_tools to find out what are the available tools. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
+    def respond(message:str, chat_history:list[dict]) -> str by llm(
+            method="ReAct",
+            tools=([list_mcp_tools, use_mcp_tool]),
+            messages=chat_history,
+            max_react_iterations=6
         );
+    can chat with infer entry {
+        logger.info("interact walker has entered to Imagechat node: %s", visitor.message);
+        response = self.respond(
+            message=visitor.message,
+            chat_history=visitor.chat_history,
+        );
+        logger.info("Response generated at RAG: %s", response);
         visitor.chat_history.append({"role": "assistant", "content": response});
         self.chat_history = visitor.chat_history;
         visitor.response = response;
@@ -118,36 +106,43 @@ node ImageChat(Chat) {
     }
 }
 
-
 # node ImageChat(Chat) {
 #     has chat_type: ChatType = ChatType.IMAGE;
-#     with entry {
-#         logger.info("ImageChat node initialized with chat type: IMAGE");
-#         print("ImageChat node initialized with chat type: IMAGE");
-#     }
 
 #     """Generate a helpful response to the user's message. Use available mcp tool when needed.Use list_mcp_tools to find out what are the available tools. Always pass arguments as a flat dictionary (e.g., {\"query\": \"Your search query\"}), never as a list or schema_dict_wrapper. """ 
-#     def respond(message:str, chat_history:list[dict]) -> str by llm(
+#     def respond(message: str) -> str by llm(
 #             method="ReAct",
-#             tools=([list_mcp_tools, use_mcp_tool]),
-#             messages=chat_history,
+#             tools=([use_mcp_tool, list_mcp_tools]),
+#             # messages=chat_history,
 #             max_react_iterations=6
 #         );
 
+#     """Generate a response to the user's message using an image and text."""
+#     def respond_with_image(img: Image, text: Text) -> str by llm(
+#         method="Chain-of-Thoughts",
+#     );
+
+#     with entry {
+#         logger.info("ImageChat node initialized with chat type: IMAGE");
+#     }
+
 #     can chat with infer entry {
-#         logger.info("interact walker has entered to ImageChat node: %s", visitor.message);
-#         print("Chat history before response:", visitor.message);
-#         # response = self.respond(
-#         #     message=visitor.message,
-#         #     chat_history=visitor.chat_history,
+#         logger.info("interact walker has entered to Imagechat node: %s", visitor.message);
+#         img = Image("uploads/user_session_123/photo.jpg");
+#         # response = self.respond_with_image(
+#         #     img=img,
+#         #     text="Describe the image content."
 #         # );
-#         # logger.info("Response generated at Image: %s", response);
-#         # visitor.chat_history.append({"role": "assistant", "content": response});
-#         # self.chat_history = visitor.chat_history;
-#         # visitor.response = response;
-#         # report {"response": response, "chat_history": visitor.chat_history};
+#         response = "Image looks great!";
+#         visitor.chat_history.append({"role": "assistant", "content": response});
+#         self.chat_history = visitor.chat_history;
+#         visitor.response = response;
+#         print("Response generated:", response);
+#         report {"response": response, "chat_history": visitor.chat_history};
 #     }
 # }
+
+
 
 node VideoChat(Chat) {
     has chat_type: ChatType = ChatType.VIDEO;
@@ -303,94 +298,3 @@ walker upload_file {
 }
 
 
-walker analyze_image {
-    has file_name: str;
-    has file_data: str;
-    has session_id: str;
-    has message: str = None;
-
-    can init_session with `root entry {
-         visit [-->](`?Session)(?id == self.session_id) else {
-            session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
-            print("Session Node Created for image analysis");
-            visit session_node;
-        }
-    }
-
-    can chat with Session entry {
-        if not os.path.exists('uploads') {
-            os.makedirs('uploads');
-        }
-        file_path = os.path.join('uploads', self.file_name);
-        data = base64.b64decode(self.file_data.encode('utf-8'));
-        with open(file_path, 'wb') as f {
-            f.write(data);
-        }
-        img = Image(file_path);
-        text = self.message if self.message else "Describe the image content.";
-        desc = here.chat_with_image(img, text);
-
-        # Add to chat history as a system message about the uploaded image
-        context_msg = f"User uploaded an image '{self.file_name}'. Analysis: {desc}";
-        here.chat_history.append({"role": "system", "content": context_msg});
-
-        if self.message {
-            here.chat_history.append({"role": "user", "content": self.message});
-            response = here.chat_with_image(
-                img=img,
-                text=self.message,
-                chat_history=here.chat_history
-            );
-            here.chat_history.append({"role": "assistant", "content": response});
-            report {"description": desc, "response": response};
-        } else {
-            report {"description": desc};
-        }
-    }
-}
-
-walker analyze_video {
-    has file_name: str;
-    has file_data: str;
-    has session_id: str;
-    has message: str = None;
-
-    can init_session with `root entry {
-         visit [-->](`?Session)(?id == self.session_id) else {
-            session_node = here ++> Session(id=self.session_id, chat_history=[], status=1);
-            print("Session Node Created for video analysis");
-            visit session_node;
-        }
-    }
-
-    can summarize with Session entry {
-        if not os.path.exists('uploads') {
-            os.makedirs('uploads');
-        }
-        file_path = os.path.join('uploads', self.file_name);
-        data = base64.b64decode(self.file_data.encode('utf-8'));
-        with open(file_path, 'wb') as f {
-            f.write(data);
-        }
-        video = Video(file_path, 1);
-        text = self.message if self.message else "Summarize the video content.";
-        summary = here.chat_with_video(video, text);
-
-        # Add to chat history as a system message about the uploaded video
-        context_msg = f"User uploaded a video '{self.file_name}'. Summary: {summary}";
-        here.chat_history.append({"role": "system", "content": context_msg});
-
-        if self.message {
-            here.chat_history.append({"role": "user", "content": self.message});
-            response = here.chat_with_video(
-                video=video,
-                text=self.message,
-                chat_history=here.chat_history
-            );
-            here.chat_history.append({"role": "assistant", "content": response});
-            report {"summary": summary, "response": response};
-        } else {
-            report {"summary": summary};
-        }
-    }
-}
