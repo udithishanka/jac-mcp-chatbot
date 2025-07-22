@@ -84,11 +84,6 @@ walker infer {
 node ImageChat(Chat) {
     has chat_type: ChatType = ChatType.IMAGE;
 
-    """Generate a response to the user's message using a video and text."""
-    def respond_with_video(video: Video, text: Text) -> str by llm(
-            method="Chain-of-Thoughts"
-        );
-
     """Answer the user's message(text) by referring to the provided image. Always refer to the given image, answer relevant to the given image."""
     def respond_with_image(img: Image, text: Text, chat_history: list[dict]) -> str by llm(tools=([use_mcp_tool, list_mcp_tools]));
 
@@ -110,29 +105,28 @@ node ImageChat(Chat) {
 
 
 
-
-
 node VideoChat(Chat) {
     has chat_type: ChatType = ChatType.VIDEO;
 
-    "Respond to message using video analysis (VIDEO)"
-    def respond(message: str, chat_history: list[dict]) -> str by llm(
-            method="ReAct",
-            tools=([list_mcp_tools, use_mcp_tool]),
-            max_react_iterations=6
+    """Generate a response to the user's message using a video and text."""
+    def respond_with_video(video: Video, text: Text, chat_history: list[dict]) -> str by llm(
+            method="Chain-of-Thoughts"
         );
-    }
+
     can chat with infer entry {
-        # Sync walker chat_history with node chat_histor
-        print("interact walker has entered to Videochat node", visitor.message);
-        response = self.respond(
-            message=visitor.message,
-            chat_history=visitor.chat_history,
+        print("interact walker has entered video chat with message:", visitor.message);
+        response = self.respond_with_video(
+            video=Video("/home/udith/jaseci_mtllm_pg/jac-rag-chatbot/current copy/uploads/mario.mp4"),
+            text=visitor.message,
+            chat_history=visitor.chat_history
         );
+
         visitor.chat_history.append({"role": "assistant", "content": response});
         self.chat_history = visitor.chat_history;
         visitor.response = response;
+        print("Response generated:", response);
         report {"response": response, "chat_history": visitor.chat_history};
+    }
 }
 
 node RagChat(Chat) {
@@ -172,7 +166,7 @@ node QAChat(Chat) {
         );
 
     can chat with infer entry {
-        print("interact walker has entered chat with message:", visitor.message);
+        print("interact walker has entered QA chat with message:", visitor.message);
         response = self.respond(
             message=visitor.message,
             chat_history=visitor.chat_history,
