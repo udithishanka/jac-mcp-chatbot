@@ -27,7 +27,7 @@ enum ChatType {
 }
 
 node Router {
-    "Classify the message as RAG, QA, or VIDEO. If classification fails, default to QA."
+    "Classify the message as RAG, QA, IMAGE or VIDEO. If classification fails, default to QA."
     def classify(message: str) -> ChatType by llm(method="Reason", temperature=0.8);
 }
 
