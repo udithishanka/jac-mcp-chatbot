@@ -1,4 +1,4 @@
-# jac-rag-chatbot
+# jac-mcp-chatbot
 
 This project demonstrates a simple Retrieval-Augmented Generation (RAG) chatbot built with Jaseci. It exposes a Streamlit based front‑end and an API powered back‑end.
 
