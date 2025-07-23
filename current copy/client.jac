@@ -37,6 +37,8 @@ def bootstrap_frontend(token: str) {
         );
         if response.status_code == 200 {
             st.success(f"File '{uploaded_file.name}' uploaded and saved to uploads/{st.session_state.session_id}.");
+            # Track last uploaded file path in session state
+            st.session_state.last_uploaded_file_path = f"uploads/{st.session_state.session_id}/{uploaded_file.name}";
         } else {
             st.error(f"Failed to process {uploaded_file.name}: {response.text}");
         }
@@ -61,12 +63,17 @@ def bootstrap_frontend(token: str) {
         with st.chat_message("assistant") {
             with st.spinner("Thinking...") {
                 # Call walker API
+                payload = {
+                    "message": prompt,
+                    "session_id": st.session_state.session_id
+                };
+                # If a file was uploaded, include its path
+                if "last_uploaded_file_path" in st.session_state {
+                    payload["file_path"] = st.session_state.last_uploaded_file_path;
+                }
                 response = requests.post(
                     "http://localhost:8000/walker/interact",
-                    json={
-                        "message": prompt,
-                        "session_id": st.session_state.session_id
-                    },
+                    json=payload,
                     headers={"Authorization": f"Bearer {token}"}
                 );
 
