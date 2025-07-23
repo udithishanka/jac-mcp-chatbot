@@ -6,7 +6,7 @@ import base64;
 def bootstrap_frontend(token: str) {
     st.set_page_config(layout="wide");
     st.title("Welcome to your Jac MCP Chatbot!");
-    
+
     # Initialize session state
     if "messages" not in st.session_state {
         st.session_state.messages = [];
@@ -18,11 +18,11 @@ def bootstrap_frontend(token: str) {
     uploaded_file = st.file_uploader('Upload File (PDF, TXT, Image, or Video)');
     if uploaded_file {
         file_b64 = base64.b64encode(uploaded_file.read()).decode('utf-8');
-        
+
         # Determine file type and endpoint
         file_extension = uploaded_file.name.lower().split('.')[-1];
         file_type = uploaded_file.type or '';
-        
+
         if file_extension == 'pdf' or file_type == 'application/pdf' {
             # Handle PDF files
             endpoint = 'upload_pdf';
@@ -37,7 +37,7 @@ def bootstrap_frontend(token: str) {
             # Handle image files
             endpoint = 'analyze_image';
             payload = {
-                "file_name": uploaded_file.name, 
+                "file_name": uploaded_file.name,
                 "file_data": file_b64,
                 "session_id": st.session_state.session_id
             };
@@ -46,7 +46,7 @@ def bootstrap_frontend(token: str) {
             # Handle video files
             endpoint = 'analyze_video';
             payload = {
-                "file_name": uploaded_file.name, 
+                "file_name": uploaded_file.name,
                 "file_data": file_b64,
                 "session_id": st.session_state.session_id
             };
@@ -55,17 +55,17 @@ def bootstrap_frontend(token: str) {
             st.error(f"Unsupported file type: {file_type or 'unknown'}. Please upload PDF, TXT, Image, or Video files.");
             return;
         }
-        
+
         # Make the API call
         response = requests.post(
             f"http://localhost:8000/walker/{endpoint}",
             json=payload,
             headers={"Authorization": f"Bearer {token}"}
         );
-        
+
         if response.status_code == 200 {
             res = response.json();
-            
+
             # Handle different response types
             if endpoint in ['analyze_image', 'analyze_video'] {
                 msg = res["reports"][0].get("description") or res["reports"][0].get("summary");
@@ -73,7 +73,7 @@ def bootstrap_frontend(token: str) {
                 analysis_message = f"I've analyzed your {file_type_name}: {msg}. Feel free to ask me any questions about it!";
                 st.session_state.messages.append({"role": "assistant", "content": analysis_message});
             }
-            
+
             st.success(success_msg);
         } else {
             st.error(f"Failed to process {uploaded_file.name}: {response.text}");
@@ -102,7 +102,7 @@ def bootstrap_frontend(token: str) {
                 response = requests.post(
                     "http://localhost:8000/walker/interact",
                     json={
-                        "message": prompt, 
+                        "message": prompt,
                         "session_id": st.session_state.session_id
                     },
                     headers={"Authorization": f"Bearer {token}"}

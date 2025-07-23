@@ -19,13 +19,13 @@ def resolve_hints(fn: typing.Callable) -> typing.Callable {
 }
 
 @mcp.tool(name="search_docs")
-@resolve_hints 
+@resolve_hints
 async def tool_search_docs(query: str) -> str {
     return rag_engine.search(query);
 }
 
 @mcp.tool(name="search_web")
-@resolve_hints 
+@resolve_hints
 async def tool_search_web(query: str) -> str{
     web_search_results = web_search.search(query);
     if not web_search_results {
