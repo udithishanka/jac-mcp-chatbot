@@ -14,7 +14,7 @@ glob MCP_SERVER_URL: str = os.getenv('MCP_SERVER_URL', 'http://localhost:8899/mc
 
 
 """ChatType enum defines the types of chat interactions. ChatType must be one of:
-- RAG: For interactions that require document retrieval.
+- RAG: For interactions that require document retrieval or web search.
 - QA: For interactions that does not require document retrieval, or image-video-related questions.
 - IMAGE: For interactions involving image analysis or anything related to images, and follow up questions.
 - VIDEO: For interactions involving video analysis or video-related questions.
@@ -47,6 +47,7 @@ Example input for `use_mcp_tool`:
 {"name": "tool_name", "arguments": {"query": "your query"}}
 """
 def use_mcp_tool(name: str, arguments: dict[str, str]) -> str {
+    print("Calling MCP tool:", name, "with arguments:", arguments);
     return mcp_client.call_mcp_tool(name=name, arguments=arguments);
 }
 
@@ -93,8 +94,6 @@ node ImageChat(Chat) {
         report {"response": response, "chat_history": visitor.chat_history};
     }
 }
-
-
 
 node VideoChat(Chat) {
     has chat_type: ChatType = ChatType.VIDEO;
@@ -166,6 +165,7 @@ node QAChat(Chat) {
     } 
 }
 
+
 walker interact {
     has message: str;
     has session_id: str;
@@ -180,8 +180,6 @@ walker interact {
         }
     }
 }
-
-
 
 node Session {
     has id: str;
@@ -198,7 +196,6 @@ node Session {
         report {"response": response.response};
     }
 }
-
 
 walker upload_file {
     has file_name: str;
